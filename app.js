@@ -187,8 +187,10 @@ function renderLedger() {
       </div>
       <h3>${budget > 0 && expSum > budget ? `<div class="note" style="margin-top:10px">⚠️ 本月支出已超预算 ${money(expSum - budget)} 元，注意控量～</div>` : ''}
     <div class="row" style="margin-top:10px"><span>🎯 本月预算</span><input type="number" id="lgBudget" value="${budget}" data-act="lg-budget" style="width:120px"> <span class="muted">元（超出标红提醒）</span></div>
-    <h3><span class="ic">🍩</span>本月支出类目占比</h3>
+      <h3><span class="ic">🍩</span>本月支出类目占比</h3>
       ${renderDonut(rows, expSum)}
+      <h3 style="margin-top:14px"><span class="ic">💰</span>各账户余额（与「存钱计划」实时联动）</h3>
+      <div class="row">${savings().map(a => `<span class="chip">${esc(a.account)} ${money(a.balance)}</span>`).join('')}</div>
     </div>
     <div class="card">
       <h3><span class="ic">?</span>记账明细</h3>
@@ -533,14 +535,14 @@ function smartLine(t) {
     let cat = '其他收入';
     for (const [c, kw] of CAT_MAP) { if (['工资', '兼职', '红包', '理财'].includes(c) && new RegExp(kw).test(t)) { cat = c; break; } }
     if (!amount) return { ok: false, text: '收入金额没听清，记得带上数字哦（如：工资到账8000）' };
-    const lg = ledger(); lg.push({ id: uid(), date, type: 'income', cat, account: account || '银行卡', amount, note: '' }); save('ledger', lg);
+    addLedgerEntry({ id: uid(), date, type: 'income', cat, account: account || '银行卡', amount, note: '' });
     return { ok: true, text: `已记收入：${cat} ${money(amount)}元（${date}）` };
   }
   if (isExpense) {
     let cat = '其他';
     for (const [c, kw] of CAT_MAP) { if (!['工资', '兼职', '红包', '理财'].includes(c) && new RegExp(kw).test(t)) { cat = c; break; } }
     if (!amount) return { ok: false, text: '支出金额没听清，记得带上数字哦（如：吃饭花了35）' };
-    const lg = ledger(); lg.push({ id: uid(), date, type: 'expense', cat, account: account || '微信', amount, note: '' }); save('ledger', lg);
+    addLedgerEntry({ id: uid(), date, type: 'expense', cat, account: account || '微信', amount, note: '' });
     return { ok: true, text: `已记支出：${cat} ${money(amount)}元${account ? ' · ' + account : ''}（${date}）` };
   }
   if (/计划|待办|提醒|打卡|要做|记得|任务|背|跑步|看书|学习|运动|写|做|去/.test(t) || /明天|今天/.test(t)) {
@@ -553,7 +555,7 @@ function smartLine(t) {
     return { ok: true, text: `已加到${dd === todayStr() ? '今天' : '计划'}待办：「${txt}」` };
   }
   if (amount > 0) {
-    const lg = ledger(); lg.push({ id: uid(), date, type: 'expense', cat: '其他', account: account || '微信', amount, note: '' }); save('ledger', lg);
+    addLedgerEntry({ id: uid(), date, type: 'expense', cat: '其他', account: account || '微信', amount, note: '' });
     return { ok: true, text: `已记支出：其他 ${money(amount)}元${account ? ' · ' + account : ''}` };
   }
   return null;
@@ -745,6 +747,24 @@ function updateLedger(id, field, val) {
   const lg = ledger(); const e = lg.find(x => x.id === id);
   if (e) { e[field] = val; save('ledger', lg); }
 }
+// 记账 ↔ 存钱计划 联动：记账时选了账户，对应存钱账户余额自动增减
+function adjustAccountBalance(account, delta) {
+  if (!account) return;
+  const accs = savings();
+  const a = accs.find(x => x.account === account);
+  if (!a) return;
+  a.balance = Math.round((Number(a.balance) || 0) + delta);
+  save('savings', accs);
+}
+function applyLedgerEffect(entry, sign) {
+  if (!entry) return;
+  const delta = (entry.type === 'income' ? 1 : -1) * (Number(entry.amount) || 0) * sign;
+  adjustAccountBalance(entry.account, delta);
+}
+function addLedgerEntry(entry) {
+  const lg = ledger(); lg.push(entry); save('ledger', lg);
+  applyLedgerEffect(entry, +1);
+}
 function handleAct(el) {
   const act = el.dataset.act;
   const set = el.dataset.set;
@@ -776,15 +796,25 @@ function handleAct(el) {
     const account = document.getElementById('lgNewAccount').value;
     const amount = Number(document.getElementById('lgNewAmt').value);
     if (!amount) { toast('请输入金额'); return; }
-    const lg = ledger(); lg.push({ id: uid(), date, type, cat, account, amount, note: document.getElementById('lgNewNote').value }); save('ledger', lg); renderLedger();
-  } else if (act === 'lg-del') { save('ledger', ledger().filter(x => x.id !== el.dataset.id)); renderLedger(); }
-  else if (act === 'lg-date') { updateLedger(el.dataset.id, 'date', el.value); }
+    const entry = { id: uid(), date, type, cat, account, amount, note: document.getElementById('lgNewNote').value };
+    addLedgerEntry(entry); renderLedger(); renderSavings();
+  } else if (act === 'lg-del') {
+    const removed = ledger().find(x => x.id === el.dataset.id);
+    save('ledger', ledger().filter(x => x.id !== el.dataset.id));
+    if (removed) applyLedgerEffect(removed, -1);
+    renderLedger(); renderSavings();
+  } else if (act === 'lg-date') { updateLedger(el.dataset.id, 'date', el.value); }
   else if (act === 'lg-type') {
     const lg = ledger(); const e = lg.find(x => x.id === el.dataset.id);
-    if (e) { e.type = el.value; if (e.type === 'income' && !INC_CATS.includes(e.cat)) e.cat = '工资'; if (e.type === 'expense' && !EXP_CATS.includes(e.cat)) e.cat = '餐饮'; save('ledger', lg); renderLedger(); }
+    if (e) { applyLedgerEffect(e, -1); e.type = el.value; if (e.type === 'income' && !INC_CATS.includes(e.cat)) e.cat = '工资'; if (e.type === 'expense' && !EXP_CATS.includes(e.cat)) e.cat = '餐饮'; applyLedgerEffect(e, +1); save('ledger', lg); renderLedger(); renderSavings(); }
   } else if (act === 'lg-cat') { updateLedger(el.dataset.id, 'cat', el.value); }
-  else if (act === 'lg-account') { updateLedger(el.dataset.id, 'account', el.value); }
-  else if (act === 'lg-amt') { updateLedger(el.dataset.id, 'amount', Number(el.value)); }
+  else if (act === 'lg-account') {
+    const lg = ledger(); const e = lg.find(x => x.id === el.dataset.id);
+    if (e) { applyLedgerEffect(e, -1); e.account = el.value; applyLedgerEffect(e, +1); save('ledger', lg); renderLedger(); renderSavings(); }
+  } else if (act === 'lg-amt') {
+    const lg = ledger(); const e = lg.find(x => x.id === el.dataset.id);
+    if (e) { applyLedgerEffect(e, -1); e.amount = Number(el.value); applyLedgerEffect(e, +1); save('ledger', lg); renderLedger(); renderSavings(); }
+  }
   else if (act === 'lg-note') { updateLedger(el.dataset.id, 'note', el.value); }
   else if (act === 'lg-newtype') { const type = el.value; const sel = document.getElementById('lgNewCat'); const cats = type === 'income' ? INC_CATS : EXP_CATS; sel.innerHTML = cats.map(c => `<option>${c}</option>`).join(''); }
   else if (act === 'lg-budget') { const s = settings(); s.ledgerBudget = Number(el.value) || 0; save('settings', s); renderLedger(); }
