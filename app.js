@@ -590,6 +590,7 @@ function openSettings() {
     <div class="field"><label>☁️ 云同步（手机 ↔ 电脑 互通）</label>
       <div class="hint">借助你自己的 GitHub 私有 Gist 实现多端同步：数据只存到你自己的私有仓库，不经过任何第三方服务器。需要一个带 <b>gist</b> 权限的 GitHub 私人令牌（PAT）。</div>
       <div class="row"><input type="password" id="syncToken" value="${s.syncToken || ''}" data-set="sync-token" placeholder="GitHub 私人令牌(gist 权限)" style="width:240px"> <button class="btn blue sm" data-set="sync-create">① 创建同步空间</button></div>
+      <div class="row"><button class="btn ghost sm" data-set="sync-goto-token">🔗 一键去 GitHub 生成令牌(gist 已勾选)</button><span class="muted">点开 → Generate → 复制 → 粘回上方输入框</span></div>
       <div class="row">
         <button class="btn ghost sm" data-set="sync-push">⬆️ 本机→云(上传)</button>
         <button class="btn ghost sm" data-set="sync-pull">⬇️ 云→本机(拉取)</button>
@@ -838,6 +839,7 @@ function handleAct(el) {
   else if (set === 'newsRefresh') { const s = settings(); s.newsRefresh = Number(el.value) || 0; save('settings', s); }
   else if (set === 'req-notify') { if ('Notification' in window) Notification.requestPermission().then(p => { const s = settings(); s.notify = p === 'granted'; save('settings', s); toast(p === 'granted' ? '通知已开启' : '未授权通知'); }); }
   else if (set === 'sync-token') { const s = settings(); s.syncToken = el.value.trim(); save('settings', s); toast('令牌已保存（仅存于本机浏览器）'); }
+  else if (set === 'sync-goto-token') { window.open('https://github.com/settings/tokens/new?scopes=gist&description=' + encodeURIComponent('牟牟工作台云同步'), '_blank'); }
   else if (set === 'sync-create') { doSyncCreate(); }
   else if (set === 'sync-push') { doSyncPush().catch(e => toast(e.message)); }
   else if (set === 'sync-pull') { doSyncPull().catch(e => toast(e.message)); }
