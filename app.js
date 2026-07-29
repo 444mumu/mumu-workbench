@@ -7,7 +7,18 @@
 /* ============ 基础工具 ============ */
 const PREFIX = 'mumu.';
 const load = (k, d) => { try { const v = localStorage.getItem(PREFIX + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
-const save = (k, v) => { try { localStorage.setItem(PREFIX + k, JSON.stringify(v)); } catch (e) {} };
+let _syncing = false, _autoSyncTimer = null;
+const save = (k, v) => {
+  try { localStorage.setItem(PREFIX + k, JSON.stringify(v)); } catch (e) {}
+  scheduleAutoSync();
+};
+function scheduleAutoSync() {
+  if (_syncing) return;
+  const s = settings();
+  if (!s.syncAuto || !s.syncToken || !s.syncGist) return;
+  if (_autoSyncTimer) clearTimeout(_autoSyncTimer);
+  _autoSyncTimer = setTimeout(() => { doSyncPush().catch(() => {}); }, 1500);
+}
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -56,7 +67,7 @@ const videos = () => load('videos', []);
 const ops = () => load('ops', []);
 const newsFav = () => load('news.fav', []);
 const setNewsFav = (v) => save('news.fav', v);
-const settings = () => load('settings', { newsRefresh: 0, notify: false, ledgerBudget: 0 });
+const settings = () => load('settings', { newsRefresh: 0, notify: false, ledgerBudget: 0, syncToken: '', syncGist: '', syncAuto: false, syncLast: '' });
 
 const EXP_CATS = ['餐饮', '交通', '购物', '居住', '水电', '医疗', '娱乐', '宠物', '育儿', '学习', '人情', '其他'];
 const INC_CATS = ['工资', '兼职', '红包', '理财', '其他收入'];
@@ -576,6 +587,16 @@ function openSettings() {
       </div>
       <div class="hint">本工作台为纯前端应用，数据存在你当前浏览器本地，不上传任何服务器。换设备可用导出/导入迁移数据。</div>
     </div>
+    <div class="field"><label>☁️ 云同步（手机 ↔ 电脑 互通）</label>
+      <div class="hint">借助你自己的 GitHub 私有 Gist 实现多端同步：数据只存到你自己的私有仓库，不经过任何第三方服务器。需要一个带 <b>gist</b> 权限的 GitHub 私人令牌（PAT）。</div>
+      <div class="row"><input type="password" id="syncToken" value="${s.syncToken || ''}" data-set="sync-token" placeholder="GitHub 私人令牌(gist 权限)" style="width:240px"> <button class="btn blue sm" data-set="sync-create">① 创建同步空间</button></div>
+      <div class="row">
+        <button class="btn ghost sm" data-set="sync-push">⬆️ 本机→云(上传)</button>
+        <button class="btn ghost sm" data-set="sync-pull">⬇️ 云→本机(拉取)</button>
+        <label class="muted"><input type="checkbox" data-set="sync-auto" ${s.syncAuto ? 'checked' : ''}> 自动同步</label>
+      </div>
+      <div class="hint" id="syncStatus">${s.syncGist ? ('同步空间已就绪 · 上次同步：' + (s.syncLast || '无')) : '尚未创建同步空间（点「① 创建同步空间」一步搞定）'}</div>
+    </div>
     <div class="field"><label>实时资讯自动刷新</label>
       <div class="row"><input type="number" value="${s.newsRefresh || 0}" data-set="newsRefresh" style="width:90px"> 分钟（0=不自动刷新）</div>
     </div>
@@ -601,6 +622,92 @@ function importData(file) {
   };
   rd.readAsText(file);
 }
+
+/* ============ ☁️ 云同步（GitHub 私有 Gist，多端互通） ============ */
+const SYNC_FILE = 'mumu-workbench-sync.json';
+function syncHeaders() {
+  const t = settings().syncToken;
+  return t ? { 'Authorization': 'token ' + t, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' } : null;
+}
+function buildSyncPayload() {
+  const data = {};
+  Object.keys(localStorage).filter(k => k.startsWith(PREFIX)).forEach(k => {
+    try { data[k.slice(PREFIX.length)] = JSON.parse(localStorage.getItem(k)); } catch (e) {}
+  });
+  return data;
+}
+// 以云端为主、尽量合并两端新增，避免任一侧数据丢失
+function mergeSync(local, cloud) {
+  const out = {};
+  const ks = new Set([...Object.keys(local || {}), ...Object.keys(cloud || {})]);
+  ks.forEach(k => {
+    const lv = local ? local[k] : undefined, cv = cloud ? cloud[k] : undefined;
+    if (Array.isArray(lv) && Array.isArray(cv)) {
+      const seen = new Set(), arr = [];
+      const uniq = (it) => { const id = it && (it.id || JSON.stringify(it)); if (id && seen.has(id)) return; if (id) seen.add(id); arr.push(it); };
+      cv.forEach(uniq); lv.forEach(uniq); out[k] = arr;
+    } else if (lv && typeof lv === 'object' && cv && typeof cv === 'object') {
+      out[k] = mergeSync(lv, cv);
+    } else {
+      out[k] = (cv !== undefined) ? cv : lv;
+    }
+  });
+  return out;
+}
+function applySyncPayload(payload) { Object.keys(payload || {}).forEach(k => save(k, payload[k])); fullRender(); }
+async function gistGet(id) {
+  const r = await fetch('https://api.github.com/gists/' + id, { headers: syncHeaders() });
+  if (!r.ok) throw new Error('读取云端失败(' + r.status + ')');
+  const j = await r.json();
+  const c = j.files && j.files[SYNC_FILE] && j.files[SYNC_FILE].content;
+  return c ? JSON.parse(c) : {};
+}
+async function gistCreate(payload) {
+  const r = await fetch('https://api.github.com/gists', { method: 'POST', headers: syncHeaders(),
+    body: JSON.stringify({ public: false, files: { [SYNC_FILE]: { content: JSON.stringify(payload, null, 2) } } }) });
+  if (!r.ok) throw new Error('创建同步空间失败(' + r.status + ')');
+  return (await r.json()).id;
+}
+async function gistUpdate(id, payload) {
+  const r = await fetch('https://api.github.com/gists/' + id, { method: 'PATCH', headers: syncHeaders(),
+    body: JSON.stringify({ files: { [SYNC_FILE]: { content: JSON.stringify(payload, null, 2) } } }) });
+  if (!r.ok) throw new Error('上传云端失败(' + r.status + ')');
+}
+async function doSyncCreate() {
+  const s = settings();
+  if (!s.syncToken) { toast('请先填写 GitHub 私人令牌'); return; }
+  if (s.syncGist && !confirm('已存在同步空间，确定新建并覆盖吗？')) return;
+  _syncing = true;
+  try {
+    const id = await gistCreate(buildSyncPayload());
+    s.syncGist = id; save('settings', s);
+    toast('同步空间已创建 ☁️'); openSettings();
+  } catch (e) { toast(e.message); } finally { _syncing = false; }
+}
+async function doSyncPush() {
+  const s = settings();
+  if (!s.syncToken || !s.syncGist) { if (!s.syncAuto) toast('请先创建同步空间'); return; }
+  _syncing = true;
+  try {
+    let payload = buildSyncPayload();
+    try { payload = mergeSync(await gistGet(s.syncGist), payload); } catch (e) {}
+    await gistUpdate(s.syncGist, payload);
+    const ns = settings(); ns.syncLast = new Date().toLocaleString('zh-CN'); save('settings', ns);
+    if (!s.syncAuto) toast('已上传到云端 ☁️');
+  } finally { _syncing = false; }
+}
+async function doSyncPull() {
+  const s = settings();
+  if (!s.syncToken || !s.syncGist) { if (!s.syncAuto) toast('请先创建同步空间'); return; }
+  _syncing = true;
+  try {
+    const merged = mergeSync(buildSyncPayload(), await gistGet(s.syncGist));
+    applySyncPayload(merged);
+    const ns = settings(); ns.syncLast = new Date().toLocaleString('zh-CN'); save('settings', ns);
+    if (!s.syncAuto) toast('已从云端拉取并合并 ✅');
+  } catch (e) { toast(e.message); } finally { _syncing = false; }
+}
+
 let deferredPrompt = null;
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; });
 function openGuide() {
@@ -730,6 +837,15 @@ function handleAct(el) {
   else if (set === 'import') { document.getElementById('importFile').click(); }
   else if (set === 'newsRefresh') { const s = settings(); s.newsRefresh = Number(el.value) || 0; save('settings', s); }
   else if (set === 'req-notify') { if ('Notification' in window) Notification.requestPermission().then(p => { const s = settings(); s.notify = p === 'granted'; save('settings', s); toast(p === 'granted' ? '通知已开启' : '未授权通知'); }); }
+  else if (set === 'sync-token') { const s = settings(); s.syncToken = el.value.trim(); save('settings', s); toast('令牌已保存（仅存于本机浏览器）'); }
+  else if (set === 'sync-create') { doSyncCreate(); }
+  else if (set === 'sync-push') { doSyncPush().catch(e => toast(e.message)); }
+  else if (set === 'sync-pull') { doSyncPull().catch(e => toast(e.message)); }
+  else if (set === 'sync-auto') {
+    const s = settings(); s.syncAuto = el.checked; save('settings', s);
+    if (s.syncAuto) { doSyncPull().then(() => doSyncPush()).catch(() => {}); toast('已开启自动同步'); }
+    else toast('已关闭自动同步');
+  }
 }
 
 function fullRender() {
@@ -747,6 +863,9 @@ function init() {
   newsCache.guimie = load('news.guimie', []);
   seedOpsIfEmpty();
   fullRender();
+
+  const st = settings();
+  if (st.syncAuto && st.syncToken && st.syncGist) doSyncPull().then(() => {}).catch(() => {});
 
   fetchNews('daily60').then(() => { if (currentView === 'news') renderNews(); });
   const tab = (document.getElementById('newsTab') || {}).value;
