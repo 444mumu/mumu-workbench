@@ -1,0 +1,12 @@
+{
+  "name": "牟牟工作台",
+  "short_name": "牟牟工作台",
+  "description": "牟牟专属工作台：每日计划、记账本、存款计划、实时资讯、爆款视频、运营学习、每日复盘",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#fff5fb",
+  "theme_color": "#ff7eb3",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

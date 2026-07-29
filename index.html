@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#ff7eb3">
+<title>牟牟工作台</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ===== 顶栏：头像 + 名字 + 日期 + 操作 ===== -->
+<header class="topbar">
+  <div class="brand">
+    <img class="avatar" src="icon.svg" alt="牟牟">
+    <div class="brand-txt">
+      <strong>牟牟工作台</strong>
+      <small id="todayLabel"></small>
+    </div>
+  </div>
+
+  <div class="top-actions">
+    <button id="btnBackup" class="pill">⬇️ 备份</button>
+    <button id="btnSettings" class="pill">⚙️ 设置</button>
+    <button id="btnInstall" class="pill primary">📲 安装</button>
+  </div>
+</header>
+
+<!-- ===== 每日激励语（开页即见） ===== -->
+<div class="quote-bar">
+  <span class="quote-emoji">🐑</span>
+  <div class="quote-body">
+    <span id="quoteText"></span>
+    <small id="quoteDate"></small>
+  </div>
+  <span class="quote-dog">🐶</span>
+</div>
+
+<!-- ===== 顶部菜单：7 个独立模块 ===== -->
+<nav class="menu" id="menu">
+  <button class="menu-item active" data-view="plan"><span>📅</span>每日计划</button>
+  <button class="menu-item" data-view="ledger"><span>🧾</span>日常记账本</button>
+  <button class="menu-item" data-view="savings"><span>💰</span>存款计划</button>
+  <button class="menu-item" data-view="news"><span>📰</span>每日实时资讯</button>
+  <button class="menu-item" data-view="videos"><span>🎬</span>爆款视频</button>
+  <button class="menu-item" data-view="ops"><span>📚</span>运营学习</button>
+  <button class="menu-item" data-view="review"><span>✍️</span>每日复盘</button>
+</nav>
+
+<!-- ===== 内容区：每个模块独立一页 ===== -->
+<main class="content" id="content">
+
+  <!-- 1. 每日计划 -->
+  <section class="view" id="view-plan">
+    <div class="view-head">
+      <h2>📅 每日计划</h2>
+      <p class="sub">今天也要元气满满，一步步完成小目标 🐑</p>
+    </div>
+    <div id="planBody"></div>
+  </section>
+
+  <!-- 2. 日常记账本 -->
+  <section class="view" id="view-ledger" hidden>
+    <div class="view-head">
+      <h2>🧾 日常记账本</h2>
+      <p class="sub">多类目 · 支出账户 · 收入 · 本月收支结余（参考 iCost）</p>
+    </div>
+    <div id="ledgerBody"></div>
+  </section>
+
+  <!-- 3. 存款计划 -->
+  <section class="view" id="view-savings" hidden>
+    <div class="view-head">
+      <h2>💰 存款计划</h2>
+      <p class="sub">记录各账户「小金库」余额，总资产实时合计</p>
+    </div>
+    <div id="savingsBody"></div>
+  </section>
+
+  <!-- 4. 每日实时资讯 -->
+  <section class="view" id="view-news" hidden>
+    <div class="view-head">
+      <h2>📰 每日实时资讯</h2>
+      <p class="sub">抖音 / 微博热点 · 鬼灭咒术新品（每日刷新 · 可收藏）</p>
+    </div>
+    <input type="hidden" id="newsTab" value="douyin">
+    <div id="newsBody"></div>
+  </section>
+
+  <!-- 5. 爆款视频 -->
+  <section class="view" id="view-videos" hidden>
+    <div class="view-head">
+      <h2>🎬 爆款视频</h2>
+      <p class="sub">每日挖掘二次元谷子爆款，拆解爆点 + 可学习之处</p>
+    </div>
+    <div id="videosBody"></div>
+  </section>
+
+  <!-- 6. 运营学习 -->
+  <section class="view" id="view-ops" hidden>
+    <div class="view-head">
+      <h2>📚 运营学习</h2>
+      <p class="sub">来自抖音 / 小红书 / 播客 / 微博 的每日运营干货</p>
+    </div>
+    <div id="opsBody"></div>
+  </section>
+
+  <!-- 7. 每日复盘 -->
+  <section class="view" id="view-review" hidden>
+    <div class="view-head">
+      <h2>✍️ 每日复盘</h2>
+      <p class="sub">写一写今天的工作与生活，沉淀成长</p>
+    </div>
+    <div id="reviewBody"></div>
+  </section>
+
+</main>
+
+<!-- ===== 右下角 AI 智能输入悬浮按钮 ===== -->
+<button class="robot" id="robotBtn" title="智能输入">🤖</button>
+
+<!-- ===== 通用弹窗 ===== -->
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <div id="modalBody"></div>
+    <div class="modal-foot"><button class="btn" id="btnCloseModal">完成</button></div>
+  </div>
+</div>
+
+<!-- ===== 周度数据分析弹窗 ===== -->
+<div class="modal-bg" id="weekModal">
+  <div class="modal wide">
+    <div id="weekBody"></div>
+    <div class="modal-foot"><button class="btn" id="btnCloseWeek">关闭</button></div>
+  </div>
+</div>
+
+<!-- ===== AI 智能输入面板 ===== -->
+<div class="robot-panel" id="robotPanel">
+  <div class="robot-head">🤖 智能小助理 <button class="x" id="robotClose">×</button></div>
+  <p class="robot-tip">用大白话告诉我，比如：「吃饭花了35微信」「明天9点跑步」「工资到账8000」</p>
+  <textarea id="robotInput" rows="3" placeholder="输入一句话，我帮你自动归类到对应模块…"></textarea>
+  <div class="robot-row">
+    <button class="btn primary" id="robotSend">解析并添加</button>
+    <button class="btn ghost" id="robotClear">清空</button>
+  </div>
+  <div id="robotResult"></div>
+</div>
+
+<div id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
