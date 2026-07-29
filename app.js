@@ -588,15 +588,17 @@ function openSettings() {
       <div class="hint">本工作台为纯前端应用，数据存在你当前浏览器本地，不上传任何服务器。换设备可用导出/导入迁移数据。</div>
     </div>
     <div class="field"><label>☁️ 云同步（手机 ↔ 电脑 互通）</label>
-      <div class="hint">借助你自己的 GitHub 私有 Gist 实现多端同步：数据只存到你自己的私有仓库，不经过任何第三方服务器。需要一个带 <b>gist</b> 权限的 GitHub 私人令牌（PAT）。</div>
-      <div class="row"><input type="password" id="syncToken" value="${s.syncToken || ''}" data-set="sync-token" placeholder="GitHub 私人令牌(gist 权限)" style="width:240px"> <button class="btn blue sm" data-set="sync-create">① 创建同步空间</button></div>
-      <div class="row"><button class="btn ghost sm" data-set="sync-goto-token">🔗 一键去 GitHub 生成令牌(gist 已勾选)</button><span class="muted">点开 → Generate → 复制 → 粘回上方输入框</span></div>
+      <div class="hint">借助你自己的 GitHub 私有 Gist 实现多端同步，数据只存到你自己的私有仓库，不经过任何第三方服务器。需要带 <b>gist</b> 权限的 GitHub 私人令牌（点下方按钮可一键生成）。</div>
+      <div class="row"><input type="password" id="syncToken" value="${s.syncToken || ''}" data-set="sync-token" placeholder="GitHub 私人令牌(gist 权限)" style="width:200px"> <button class="btn blue sm" data-set="sync-create">① 创建同步空间</button></div>
+      <div class="row"><button class="btn ghost sm" data-set="sync-goto-token">🔗 一键去 GitHub 生成令牌</button><span class="muted">Generate → 复制 → 粘回上方</span></div>
+      ${s.syncGist ? `<div class="row"><span class="muted">本机同步码：</span><code id="syncCodeShown" style="user-select:all">${s.syncGist}</code><button class="btn ghost sm" data-set="sync-copycode">复制</button><span class="muted">→ 在另一台设备粘贴此码即可互通</span></div>` : ''}
+      <div class="row"><input id="syncCodeInput" placeholder="粘贴另一台设备的同步码" style="width:220px"> <button class="btn ghost sm" data-set="sync-applycode">应用同步码并拉取</button></div>
       <div class="row">
         <button class="btn ghost sm" data-set="sync-push">⬆️ 本机→云(上传)</button>
         <button class="btn ghost sm" data-set="sync-pull">⬇️ 云→本机(拉取)</button>
         <label class="muted"><input type="checkbox" data-set="sync-auto" ${s.syncAuto ? 'checked' : ''}> 自动同步</label>
       </div>
-      <div class="hint" id="syncStatus">${s.syncGist ? ('同步空间已就绪 · 上次同步：' + (s.syncLast || '无')) : '尚未创建同步空间（点「① 创建同步空间」一步搞定）'}</div>
+      <div class="hint" id="syncStatus">${s.syncGist ? ('同步空间已就绪 · 上次同步：' + (s.syncLast || '无')) : '第 1 台：填令牌 → ① 创建同步空间 → 复制「本机同步码」。第 2 台：填同样的令牌 → 粘贴同步码 → 应用并拉取。'}</div>
     </div>
     <div class="field"><label>实时资讯自动刷新</label>
       <div class="row"><input type="number" value="${s.newsRefresh || 0}" data-set="newsRefresh" style="width:90px"> 分钟（0=不自动刷新）</div>
@@ -840,6 +842,13 @@ function handleAct(el) {
   else if (set === 'req-notify') { if ('Notification' in window) Notification.requestPermission().then(p => { const s = settings(); s.notify = p === 'granted'; save('settings', s); toast(p === 'granted' ? '通知已开启' : '未授权通知'); }); }
   else if (set === 'sync-token') { const s = settings(); s.syncToken = el.value.trim(); save('settings', s); toast('令牌已保存（仅存于本机浏览器）'); }
   else if (set === 'sync-goto-token') { window.open('https://github.com/settings/tokens/new?scopes=gist&description=' + encodeURIComponent('牟牟工作台云同步'), '_blank'); }
+  else if (set === 'sync-copycode') { const c = settings().syncGist; if (c) { copyText(c); toast('同步码已复制'); } }
+  else if (set === 'sync-applycode') {
+    const code = (document.getElementById('syncCodeInput') || {}).value || '';
+    if (!code.trim()) { toast('请先粘贴另一台设备的同步码'); return; }
+    const sc = settings(); sc.syncGist = code.trim(); save('settings', sc);
+    doSyncPull().then(() => { if (sc.syncAuto) doSyncPush().catch(() => {}); }).catch(() => {});
+  }
   else if (set === 'sync-create') { doSyncCreate(); }
   else if (set === 'sync-push') { doSyncPush().catch(e => toast(e.message)); }
   else if (set === 'sync-pull') { doSyncPull().catch(e => toast(e.message)); }
