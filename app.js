@@ -42,11 +42,16 @@ const setPlan = (d, v) => save('plan.' + d, v);
 const getReview = (d) => load('review.' + d, { text: '' });
 const setReview = (d, v) => save('review.' + d, v);
 const ledger = () => load('ledger', []);
-const savings = () => load('savings', [
+const SAVINGS_SEED = () => [
   { id: uid(), name: '银行卡', account: '银行卡', goal: 0, balance: 0 },
   { id: uid(), name: '支付宝', account: '支付宝', goal: 0, balance: 0 },
   { id: uid(), name: '微信', account: '微信', goal: 0, balance: 0 },
-]);
+];
+const savings = () => {
+  const v = load('savings', null);
+  if (v == null) { const seed = SAVINGS_SEED(); save('savings', seed); return seed; }
+  return v;
+};
 const videos = () => load('videos', []);
 const ops = () => load('ops', []);
 const newsFav = () => load('news.fav', []);
