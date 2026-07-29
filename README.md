@@ -16,12 +16,15 @@
 
 ## 🚀 如何打开
 
-### 🌐 在线链接（电脑 / 手机通用，已做休眠保活）
+### 🌐 在线链接（永久、电脑 / 手机通用、无需唤醒）
 
-> **牟牟工作台在线地址：**
-> `https://webview.e2b.bj9.sandbox.cloudstudio.club/?x-cs-sandbox-id=a960da377b584ac69a9e82ce4fcb0759&x-cs-sandbox-port=8080`
+> **牟牟工作台永久地址（推荐，随时可开）：**
+> `https://444mumu.github.io/mumu-workbench/`
 >
-> 这是一条**长期稳定的链接**：服务端已注册到沙箱守护进程，沙箱休眠后自动重启、链接不变。电脑浏览器和手机浏览器直接打开即可用，数据存在你自己的浏览器里。
+> 已部署到 GitHub Pages，**真正长期稳定**：永不休眠、不用点「立即启动」、电脑和手机浏览器直接打开就能用。数据存在你自己的浏览器里。
+
+> 备用（沙箱预览，休眠后需点「立即启动」）：
+> `https://webview.e2b.bj9.sandbox.cloudstudio.club/?x-cs-sandbox-id=a960da377b584ac69a9e82ce4fcb0759&x-cs-sandbox-port=8080`
 
 - **最简单**：双击 `index.html` 用浏览器打开即可使用（数据存在本机浏览器）。
 - **推荐（解锁 PWA「添加到主屏幕」）**：用上面的在线链接，或本地起服务后浏览器才允许「添加到主屏幕」：
